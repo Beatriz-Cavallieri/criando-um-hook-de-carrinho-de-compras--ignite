@@ -32,6 +32,15 @@ export function CartProvider({ children }: CartProviderProps): JSX.Element {
     return [];
   });
 
+  const updateCart = (newCart: Product[]) => {
+    setCart(newCart);
+    localStorage.setItem("@RocketShoes:cart", JSON.stringify(newCart));
+  };
+
+  const findProductInCart = (productId: number) => {
+    return cart.find((product) => product.id === productId);
+  };
+
   // Tratamento de erros
   const handleInsufficientStock = () =>
     toast.error("Quantidade solicitada fora de estoque");
@@ -39,50 +48,46 @@ export function CartProvider({ children }: CartProviderProps): JSX.Element {
   const handleErrorAddingProduct = () =>
     toast.error("Erro na adição do produto");
 
-  // const handleErrorRemovingProduct = () =>
-  //   toast.error("Erro na remoção do produto");
+  const handleErrorRemovingProduct = () =>
+    toast.error("Erro na remoção do produto");
 
   const handleErrorUpdatingProductAmount = () =>
     toast.error("Erro na alteração de quantidade do produto");
 
   const addProduct = async (productId: number) => {
     try {
-      let updatedCart = cart; //variável auxiliar
+      let newCart = []; //variável auxiliar
 
       const { data: stock } = await api.get<Stock>(`/stock/${productId}`);
 
-      const productAlreadyInCart = cart.find(
-        (product) => product.id === productId
-      );
+      const productExistsInCart = findProductInCart(productId);
 
-      if (productAlreadyInCart) {
-        // Verificar se tem estoque disponível: itens no estoque > no carrinho
-        if (stock.amount > productAlreadyInCart.amount) {
-          updatedCart = cart.map((product) =>
-            product.id === productAlreadyInCart.id
-              ? { ...product, amount: product.amount + 1 }
-              : product
-          );
-        } else {
+      if (productExistsInCart) {
+        if (stock.amount <= productExistsInCart.amount) {
           handleInsufficientStock();
           return;
         }
+
+        newCart = cart.map((product) =>
+          product.id === productExistsInCart.id
+            ? { ...product, amount: product.amount + 1 }
+            : product
+        );
       } else {
-        // Primeiro desse item no carrinho
-        if (stock.amount > 0) {
-          const { data: product } = await api.get<Product>(
-            `/products/${productId}`
-          );
-          updatedCart = [...cart, { ...product, amount: 1 }];
-        } else {
+        if (stock.amount < 1) {
           handleInsufficientStock();
           return;
         }
+
+        // Primeiro desse item no carrinho
+        const { data: product } = await api.get<Product>(
+          `/products/${productId}`
+        );
+
+        newCart = [...cart, { ...product, amount: 1 }];
       }
-      // Atualizar estado
-      setCart(updatedCart);
-      // Perpetuar valor no localStorage
-      localStorage.setItem("@RocketShoes:cart", JSON.stringify(updatedCart));
+      
+      updateCart(newCart);
     } catch {
       handleErrorAddingProduct();
     }
@@ -90,9 +95,15 @@ export function CartProvider({ children }: CartProviderProps): JSX.Element {
 
   const removeProduct = (productId: number) => {
     try {
-      // TODO
+      const productExistsInCart = findProductInCart(productId);
+
+      if (!productExistsInCart) throw Error;
+
+      const newCart = cart.filter((product) => product.id !== productId);
+
+      updateCart(newCart);
     } catch {
-      // TODO
+      handleErrorRemovingProduct();
     }
   };
 
@@ -110,17 +121,15 @@ export function CartProvider({ children }: CartProviderProps): JSX.Element {
         return;
       }
 
-      const productAlreadyInCart = cart.find(
-        (product) => product.id === productId
-      );
+      const productExistsInCart = findProductInCart(productId);
 
-      if (!productAlreadyInCart) throw Error;
+      if (!productExistsInCart) throw Error;
 
-      const updatedCart = cart.map((product) => {
+      const newCart = cart.map((product) => {
         return product.id === productId ? { ...product, amount } : product;
       });
 
-      setCart(updatedCart);
+      updateCart(newCart);
     } catch {
       handleErrorUpdatingProductAmount();
     }
